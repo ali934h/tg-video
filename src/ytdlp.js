@@ -76,8 +76,16 @@ function runYtDlp(args, { onStdout, onStderr, timeoutMs } = {}) {
   });
 }
 
+const YT_EXTRACTOR_ARGS = "youtube:player_client=tv,default,mweb";
+
 async function probe(url, cookiesPath) {
-  const args = ["-J", "--no-playlist", "--no-warnings"];
+  const args = [
+    "-J",
+    "--no-playlist",
+    "--no-warnings",
+    "--extractor-args",
+    YT_EXTRACTOR_ARGS,
+  ];
   if (cookiesPath) args.push("--cookies", cookiesPath);
   args.push(url);
 
@@ -129,6 +137,8 @@ async function downloadVideo({
     "--no-playlist",
     "--newline",
     "--no-warnings",
+    "--extractor-args",
+    YT_EXTRACTOR_ARGS,
     "-o",
     path.join(jobDir, "%(title).100B.%(ext)s"),
   ];
@@ -156,6 +166,8 @@ async function downloadAudio({ url, jobDir, cookiesPath, onProgress }) {
     "--no-playlist",
     "--newline",
     "--no-warnings",
+    "--extractor-args",
+    YT_EXTRACTOR_ARGS,
     "-o",
     path.join(jobDir, "%(title).100B.%(ext)s"),
   ];

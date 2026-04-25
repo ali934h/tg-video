@@ -248,8 +248,15 @@ class Bot {
   }
 
   async onCallback(event) {
-    const senderId = event.userId ? Number(event.userId.toString()) : null;
+    const rawId =
+      event.senderId ||
+      (event.query && event.query.userId) ||
+      event.userId;
+    const senderId = rawId ? Number(rawId.toString()) : null;
     if (!senderId || !auth.isAllowed(senderId)) {
+      logger.warn(
+        `Callback from unauthorized or unknown user (resolved=${senderId})`,
+      );
       await event.answer({ message: "⛔ Not authorized.", alert: true });
       return;
     }
