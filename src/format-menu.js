@@ -97,7 +97,23 @@ function buildAllVideoMenu(probeInfo) {
 function buildAllAudioMenu(probeInfo) {
   const rows = [];
   const duration = probeInfo.duration || 0;
+  const audioFormats = Array.isArray(probeInfo.audioFormats)
+    ? probeInfo.audioFormats
+    : [];
 
+  // Native audio-only formats from yt-dlp (downloaded as-is, no transcoding)
+  audioFormats.forEach((a, i) => {
+    const parts = [];
+    if (a.codec) parts.push(a.codec);
+    if (a.abr) parts.push(`${Math.round(a.abr)}k`);
+    const meta = parts.join(" ") || a.ext || "audio";
+    const sizeStr = humanSize(a.sizeBytes);
+    const label =
+      `🎧 ${a.ext || "audio"} (${meta})` + (sizeStr ? `  ${sizeStr}` : "");
+    rows.push([{ label, data: `a:idx:${i}` }]);
+  });
+
+  // MP3 conversion options (always available; uses bestaudio source)
   for (const br of MP3_BITRATES) {
     const size = humanSize(estimateMp3Bytes(duration, br));
     rows.push([
@@ -107,8 +123,6 @@ function buildAllAudioMenu(probeInfo) {
       },
     ]);
   }
-
-  // MP3 Best (~LAME V0, roughly 245 kbps avg for estimation)
   const bestMp3Size = humanSize(estimateMp3Bytes(duration, 245));
   rows.push([
     {
@@ -116,15 +130,6 @@ function buildAllAudioMenu(probeInfo) {
       data: "a:mp3",
     },
   ]);
-
-  const best = probeInfo.bestAudio;
-  if (best) {
-    const sizeStr = humanSize(best.sizeBytes);
-    const label =
-      `🎧 Original (${best.ext || "audio"})` +
-      (sizeStr ? `  ${sizeStr}` : "");
-    rows.push([{ label, data: "a:orig" }]);
-  }
 
   rows.push([
     { label: "⬅️ Back", data: "back" },

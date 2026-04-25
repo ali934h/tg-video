@@ -335,12 +335,13 @@ class Bot {
 
     userState.activeJob = true;
     const url = userState.pendingUrl;
+    const probeInfo = userState.pendingFormats;
     userState.pendingUrl = null;
     userState.pendingFormats = null;
 
     try {
       await event.answer({ message: "Starting..." });
-      await this.runJob(event, senderId, url, kind, parts.slice(1));
+      await this.runJob(event, senderId, url, kind, parts.slice(1), probeInfo);
     } catch (err) {
       logger.error(`Job failed for ${senderId}:`, err.message);
       await this.notifyJobError(event, senderId, err);
@@ -349,7 +350,7 @@ class Bot {
     }
   }
 
-  async runJob(event, senderId, url, kind, parts) {
+  async runJob(event, senderId, url, kind, parts, probeInfo) {
     const chatId = event.chatId;
     const messageId = Number(event.messageId);
     const cookiesPath = cookies.getCookiesPath(senderId);
@@ -361,13 +362,36 @@ class Bot {
 
     let audioMode = null;
     let audioBitrate = 0;
+    let audioFormatId = "";
     let videoHeight = 0;
     let labelLine;
     if (kind === "a") {
       const sub = parts[0] || "mp3";
-      if (sub === "orig") {
+      if (sub === "idx") {
         audioMode = "original";
-        labelLine = "🎧 Original audio";
+        const idx = Number(parts[1]);
+        const af =
+          probeInfo &&
+          Array.isArray(probeInfo.audioFormats) &&
+          probeInfo.audioFormats[idx];
+        if (af && af.formatId) {
+          audioFormatId = af.formatId;
+          const meta = [af.codec, af.abr ? `${Math.round(af.abr)}k` : ""]
+            .filter(Boolean)
+            .join(" ");
+          labelLine = `🎧 ${af.ext || "audio"}${meta ? ` (${meta})` : ""}`;
+        } else {
+          audioMode = "mp3";
+          labelLine = "🎵 MP3 (Best)";
+        }
+      } else if (sub === "orig") {
+        audioMode = "original";
+        if (probeInfo && probeInfo.bestAudio && probeInfo.bestAudio.formatId) {
+          audioFormatId = probeInfo.bestAudio.formatId;
+          labelLine = `🎧 Original (${probeInfo.bestAudio.ext || "audio"})`;
+        } else {
+          labelLine = "🎧 Original audio";
+        }
       } else {
         audioMode = "mp3";
         audioBitrate = parts[1] ? Number(parts[1]) : 0;
@@ -406,6 +430,7 @@ class Bot {
           cookiesPath,
           mode: audioMode,
           bitrateKbps: audioBitrate,
+          formatId: audioFormatId,
           onProgress: (p) =>
             editStatus(`${labelLine}\n⬇️ Downloading... ${p.toFixed(1)}%`),
         });

@@ -138,29 +138,32 @@ async function probe(url, cookiesPath) {
     ? availableHeights[availableHeights.length - 1]
     : 0;
 
-  // Audio formats
-  const audioOnlyList = formats.filter(
-    (f) => f.vcodec === "none" && f.acodec && f.acodec !== "none",
-  );
-  let bestAudio = null;
-  for (const f of audioOnlyList) {
-    const abr = typeof f.abr === "number" ? f.abr : 0;
-    const sizeBytes = estimateBytes(f);
-    const candidate = {
+  // Audio formats (only the ones yt-dlp marks as audio-only)
+  const audioFormats = formats
+    .filter((f) => f.vcodec === "none" && f.acodec && f.acodec !== "none")
+    .map((f) => ({
+      formatId: f.format_id,
       ext: f.ext || "audio",
       codec: f.acodec || "",
-      abr,
-      sizeBytes,
-      formatId: f.format_id,
-    };
+      abr: typeof f.abr === "number" ? f.abr : 0,
+      sizeBytes: estimateBytes(f),
+    }))
+    // Drop entries with no useful identifier
+    .filter((a) => a.formatId)
+    // Sort ascending by bitrate (lowest first), then by size as tiebreaker
+    .sort((a, b) => a.abr - b.abr || a.sizeBytes - b.sizeBytes);
+
+  let bestAudio = null;
+  for (const a of audioFormats) {
     if (
       !bestAudio ||
-      abr > bestAudio.abr ||
-      (abr === bestAudio.abr && sizeBytes > bestAudio.sizeBytes)
+      a.abr > bestAudio.abr ||
+      (a.abr === bestAudio.abr && a.sizeBytes > bestAudio.sizeBytes)
     ) {
-      bestAudio = candidate;
+      bestAudio = a;
     }
   }
+
   // Add audio size to each video height estimate, but only when the source
   // provides separate audio-only streams (muxed/HLS streams already include
   // audio in the video format's size).
@@ -182,6 +185,7 @@ async function probe(url, cookiesPath) {
     maxHeight,
     availableHeights,
     videoHeights,
+    audioFormats,
     bestAudio,
     hasVideo,
     hasAudio,
@@ -235,11 +239,13 @@ async function downloadAudio({
   onProgress,
   mode = "mp3",
   bitrateKbps = 0,
+  formatId = "",
 }) {
   fs.mkdirSync(jobDir, { recursive: true });
+  const formatSelector = formatId ? formatId : "bestaudio/best";
   const args = [
     "-f",
-    "bestaudio/best",
+    formatSelector,
     "--restrict-filenames",
     "--no-playlist",
     "--newline",
