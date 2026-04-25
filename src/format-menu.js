@@ -8,16 +8,28 @@ function buildMenu(probeInfo) {
   }
 
   if (probeInfo.hasVideo) {
-    const max = probeInfo.maxHeight;
-    if (max && max > 0) {
-      const heights = STANDARD_HEIGHTS.filter((h) => h <= max);
+    const available = Array.isArray(probeInfo.availableHeights)
+      ? probeInfo.availableHeights
+      : [];
+    let heights;
+    if (available.length > 0) {
+      const standardSubset = STANDARD_HEIGHTS.filter((h) => available.includes(h));
+      const max = available[available.length - 1];
+      heights = [...standardSubset];
       if (!heights.includes(max)) heights.push(max);
+      heights = [...new Set(heights)].sort((a, b) => a - b);
+    } else if (probeInfo.maxHeight && probeInfo.maxHeight > 0) {
+      heights = STANDARD_HEIGHTS.filter((h) => h <= probeInfo.maxHeight);
+      if (!heights.includes(probeInfo.maxHeight)) heights.push(probeInfo.maxHeight);
+    } else {
+      heights = [];
+    }
 
+    if (heights.length > 0) {
       const videoButtons = heights.map((h) => ({
         label: `🎬 ${h}p`,
         data: `v:${h}`,
       }));
-
       while (videoButtons.length) {
         rows.push(videoButtons.splice(0, 2));
       }

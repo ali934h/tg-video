@@ -107,7 +107,10 @@ async function probe(url, cookiesPath) {
     .filter(isVideoCandidate)
     .map((f) => f.height)
     .filter((h) => typeof h === "number" && h > 0);
-  const maxHeight = heights.length ? Math.max(...heights) : 0;
+  const availableHeights = [...new Set(heights)].sort((a, b) => a - b);
+  const maxHeight = availableHeights.length
+    ? availableHeights[availableHeights.length - 1]
+    : 0;
 
   const hasVideo = formats.some(isVideoCandidate) || formats.length > 0;
   const hasAudio = true;
@@ -117,6 +120,7 @@ async function probe(url, cookiesPath) {
     duration: data.duration || 0,
     extractor: data.extractor || data.extractor_key || "",
     maxHeight,
+    availableHeights,
     hasVideo,
     hasAudio,
     isLive: !!data.is_live,
