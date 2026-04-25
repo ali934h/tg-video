@@ -63,6 +63,30 @@ Bot commands (also exposed via the slash-command menu in your Telegram client):
 | `/cancel` | Cancel the current operation / reset state |
 | `/clearcookies` | Delete saved cookies for your account |
 
+## Managing allowed users
+
+Only Telegram user IDs listed in `ALLOWED_USERS` can use the bot. To add or remove users:
+
+```bash
+nano /root/tg-video/.env
+```
+
+Edit the `ALLOWED_USERS` line — comma-separated, no spaces:
+
+```dotenv
+ALLOWED_USERS=8261361884,77933874,123456789
+```
+
+Save and restart:
+
+```bash
+pm2 restart tg-video
+```
+
+The new list takes effect immediately. `update.sh` only pulls code and restarts; it never touches `.env`, so your allowed users (and cookies) are preserved across updates.
+
+To find someone's numeric Telegram id, send `/start` to [@userinfobot](https://t.me/userinfobot).
+
 ## Troubleshooting
 
 **Bot does not respond.** Check `pm2 logs tg-video`. Make sure your user id is in `ALLOWED_USERS` inside `/root/tg-video/.env`.
