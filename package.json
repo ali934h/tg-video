@@ -1,0 +1,17 @@
+{
+  "name": "tg-video",
+  "version": "1.0.0",
+  "description": "Simple Telegram bot to download YouTube and NSFW videos via yt-dlp",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "telegram": "^2.26.16"
+  },
+  "private": true
+}

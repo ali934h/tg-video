@@ -1,0 +1,7 @@
+node_modules/
+.env
+logs/*.log
+logs/*.gz
+*.session
+*.session-journal
+.DS_Store
