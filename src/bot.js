@@ -266,7 +266,7 @@ class Bot {
 
     if (data === "cancel") {
       userState.pendingUrl = null;
-      await event.edit({ text: "❌ Cancelled.", buttons: [] });
+      await event.edit({ text: "❌ Cancelled." });
       await event.answer({ message: "Cancelled" });
       return;
     }
@@ -330,7 +330,6 @@ class Bot {
         await this.client.editMessage(chatId, {
           message: messageId,
           text,
-          buttons: [],
         });
       } catch (e) {
         // Ignore "message not modified" / flood errors
@@ -371,7 +370,6 @@ class Bot {
       await this.client.editMessage(chatId, {
         message: messageId,
         text: `${labelLine}\n📤 Uploading ${humanSize(stat.size)}...`,
-        buttons: [],
       });
 
       const isAudio = kind === "a";
@@ -401,7 +399,6 @@ class Bot {
             .editMessage(chatId, {
               message: messageId,
               text: `${labelLine}\n📤 Uploading... ${pct}%`,
-              buttons: [],
             })
             .catch(() => {});
         },
@@ -410,7 +407,6 @@ class Bot {
       await this.client.editMessage(chatId, {
         message: messageId,
         text: `${labelLine}\n✅ Done.`,
-        buttons: [],
       });
     } finally {
       cleanupDir(jobDir);
@@ -430,7 +426,6 @@ class Bot {
             "for that site, and either paste the file contents as text OR send " +
             "the cookies.txt file. Then send the link again.",
           parseMode: "markdown",
-          buttons: [],
         });
       } catch (e) {
         // ignore
@@ -443,7 +438,6 @@ class Bot {
         message: event.messageId,
         text: `❌ Failed:\n\`\`\`\n${truncate(err.message, 400)}\n\`\`\``,
         parseMode: "markdown",
-        buttons: [],
       });
     } catch (e) {
       // ignore
