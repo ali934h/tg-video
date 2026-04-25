@@ -98,29 +98,91 @@ async function probe(url, cookiesPath) {
   }
 
   const formats = Array.isArray(data.formats) ? data.formats : [];
+  const duration = Number(data.duration) || 0;
 
   const isAudioOnly = (f) =>
     f.vcodec === "none" && f.acodec && f.acodec !== "none";
   const isVideoCandidate = (f) => !isAudioOnly(f);
 
-  const heights = formats
-    .filter(isVideoCandidate)
-    .map((f) => f.height)
-    .filter((h) => typeof h === "number" && h > 0);
-  const availableHeights = [...new Set(heights)].sort((a, b) => a - b);
+  const estimateBytes = (f) => {
+    if (typeof f.filesize === "number" && f.filesize > 0) return f.filesize;
+    if (typeof f.filesize_approx === "number" && f.filesize_approx > 0)
+      return f.filesize_approx;
+    const rate =
+      (typeof f.tbr === "number" && f.tbr) ||
+      (typeof f.vbr === "number" && f.vbr) ||
+      (typeof f.abr === "number" && f.abr) ||
+      0;
+    if (rate > 0 && duration > 0) {
+      return Math.round((rate * 1000 * duration) / 8);
+    }
+    return 0;
+  };
+
+  // Video heights
+  const byHeight = new Map();
+  for (const f of formats.filter(isVideoCandidate)) {
+    const h = f.height;
+    if (typeof h !== "number" || h <= 0) continue;
+    const size = estimateBytes(f);
+    const prev = byHeight.get(h);
+    if (!prev || size > prev.sizeBytes) {
+      byHeight.set(h, { height: h, sizeBytes: size });
+    }
+  }
+  const videoHeights = [...byHeight.values()].sort(
+    (a, b) => a.height - b.height,
+  );
+  const availableHeights = videoHeights.map((v) => v.height);
   const maxHeight = availableHeights.length
     ? availableHeights[availableHeights.length - 1]
     : 0;
+
+  // Audio formats
+  const audioOnlyList = formats.filter(
+    (f) => f.vcodec === "none" && f.acodec && f.acodec !== "none",
+  );
+  let bestAudio = null;
+  for (const f of audioOnlyList) {
+    const abr = typeof f.abr === "number" ? f.abr : 0;
+    const sizeBytes = estimateBytes(f);
+    const candidate = {
+      ext: f.ext || "audio",
+      codec: f.acodec || "",
+      abr,
+      sizeBytes,
+      formatId: f.format_id,
+    };
+    if (
+      !bestAudio ||
+      abr > bestAudio.abr ||
+      (abr === bestAudio.abr && sizeBytes > bestAudio.sizeBytes)
+    ) {
+      bestAudio = candidate;
+    }
+  }
+  // Add audio size to each video height estimate, but only when the source
+  // provides separate audio-only streams (muxed/HLS streams already include
+  // audio in the video format's size).
+  if (bestAudio && bestAudio.sizeBytes > 0) {
+    for (const v of videoHeights) {
+      if (v.sizeBytes > 0) {
+        v.sizeBytes += bestAudio.sizeBytes;
+      }
+    }
+  }
 
   const hasVideo = formats.some(isVideoCandidate) || formats.length > 0;
   const hasAudio = true;
 
   return {
     title: data.title || "video",
-    duration: data.duration || 0,
+    duration,
     extractor: data.extractor || data.extractor_key || "",
     maxHeight,
     availableHeights,
+    videoHeights,
+    bestAudio,
     hasVideo,
     hasAudio,
     isLive: !!data.is_live,
@@ -166,16 +228,18 @@ async function downloadVideo({
   return findOutputFile(jobDir);
 }
 
-async function downloadAudio({ url, jobDir, cookiesPath, onProgress }) {
+async function downloadAudio({
+  url,
+  jobDir,
+  cookiesPath,
+  onProgress,
+  mode = "mp3",
+  bitrateKbps = 0,
+}) {
   fs.mkdirSync(jobDir, { recursive: true });
   const args = [
     "-f",
     "bestaudio/best",
-    "-x",
-    "--audio-format",
-    "mp3",
-    "--audio-quality",
-    "0",
     "--restrict-filenames",
     "--no-playlist",
     "--newline",
@@ -185,6 +249,17 @@ async function downloadAudio({ url, jobDir, cookiesPath, onProgress }) {
     "-o",
     path.join(jobDir, "%(title).100B.%(ext)s"),
   ];
+
+  if (mode === "mp3") {
+    args.push("-x", "--audio-format", "mp3");
+    if (bitrateKbps && bitrateKbps > 0) {
+      args.push("--audio-quality", `${bitrateKbps}K`);
+    } else {
+      args.push("--audio-quality", "0");
+    }
+  }
+  // mode === "original": keep original container, no conversion
+
   if (cookiesPath) args.unshift("--cookies", cookiesPath);
   args.push(url);
 

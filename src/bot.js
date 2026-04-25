@@ -11,7 +11,11 @@ const auth = require("./auth");
 const state = require("./state");
 const ytdlp = require("./ytdlp");
 const cookies = require("./cookies");
-const { buildMenu } = require("./format-menu");
+const {
+  buildMainMenu,
+  buildAllVideoMenu,
+  buildAllAudioMenu,
+} = require("./format-menu");
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/i;
 
@@ -229,7 +233,10 @@ class Bot {
     }
 
     userState.pendingUrl = url;
-    const rows = buildMenu(info);
+    userState.pendingFormats = info;
+    userState.menuMessageId = Number(status.id);
+
+    const rows = buildMainMenu(info);
     const buttons = buildButtons(rows);
 
     const durationStr = info.duration
@@ -266,6 +273,7 @@ class Bot {
 
     if (data === "cancel") {
       userState.pendingUrl = null;
+      userState.pendingFormats = null;
       try {
         await this.client.editMessage(event.chatId, {
           message: Number(event.messageId),
@@ -278,7 +286,7 @@ class Bot {
       return;
     }
 
-    if (!userState.pendingUrl) {
+    if (!userState.pendingUrl || !userState.pendingFormats) {
       await event.answer({
         message: "Session expired. Send the link again.",
         alert: true,
@@ -294,7 +302,32 @@ class Bot {
       return;
     }
 
-    const [kind, value] = data.split(":");
+    if (data === "all_v" || data === "all_a" || data === "back") {
+      const info = userState.pendingFormats;
+      let rows;
+      if (data === "all_v") rows = buildAllVideoMenu(info);
+      else if (data === "all_a") rows = buildAllAudioMenu(info);
+      else rows = buildMainMenu(info);
+      const buttons = buildButtons(rows);
+      try {
+        await this.client.editMessage(event.chatId, {
+          message: Number(event.messageId),
+          text:
+            `🎬 *${escapeMd(info.title)}*\n` +
+            (info.duration ? `⏱ ${formatDuration(info.duration)}\n` : "") +
+            `\nChoose quality:`,
+          parseMode: "markdown",
+          buttons,
+        });
+      } catch (e) {
+        logger.debug(`Menu switch edit failed: ${e.message}`);
+      }
+      await event.answer({});
+      return;
+    }
+
+    const parts = data.split(":");
+    const kind = parts[0];
     if (kind !== "a" && kind !== "v") {
       await event.answer({ message: "Unknown action.", alert: true });
       return;
@@ -303,10 +336,11 @@ class Bot {
     userState.activeJob = true;
     const url = userState.pendingUrl;
     userState.pendingUrl = null;
+    userState.pendingFormats = null;
 
     try {
       await event.answer({ message: "Starting..." });
-      await this.runJob(event, senderId, url, kind, value);
+      await this.runJob(event, senderId, url, kind, parts.slice(1));
     } catch (err) {
       logger.error(`Job failed for ${senderId}:`, err.message);
       await this.notifyJobError(event, senderId, err);
@@ -315,7 +349,7 @@ class Bot {
     }
   }
 
-  async runJob(event, senderId, url, kind, value) {
+  async runJob(event, senderId, url, kind, parts) {
     const chatId = event.chatId;
     const messageId = Number(event.messageId);
     const cookiesPath = cookies.getCookiesPath(senderId);
@@ -325,8 +359,26 @@ class Bot {
       Date.now().toString(),
     );
 
-    const labelLine =
-      kind === "a" ? "🎵 Audio (MP3)" : `🎬 ${value}p`;
+    let audioMode = null;
+    let audioBitrate = 0;
+    let videoHeight = 0;
+    let labelLine;
+    if (kind === "a") {
+      const sub = parts[0] || "mp3";
+      if (sub === "orig") {
+        audioMode = "original";
+        labelLine = "🎧 Original audio";
+      } else {
+        audioMode = "mp3";
+        audioBitrate = parts[1] ? Number(parts[1]) : 0;
+        labelLine = audioBitrate
+          ? `🎵 MP3 ${audioBitrate}k`
+          : "🎵 MP3 (Best)";
+      }
+    } else {
+      videoHeight = Number(parts[0]) || 0;
+      labelLine = videoHeight > 0 ? `🎬 ${videoHeight}p` : "🎬 Best video";
+    }
 
     let lastEdit = 0;
     const editStatus = async (text) => {
@@ -352,6 +404,8 @@ class Bot {
           url,
           jobDir,
           cookiesPath,
+          mode: audioMode,
+          bitrateKbps: audioBitrate,
           onProgress: (p) =>
             editStatus(`${labelLine}\n⬇️ Downloading... ${p.toFixed(1)}%`),
         });
@@ -359,7 +413,7 @@ class Bot {
         outputFile = await ytdlp.downloadVideo({
           url,
           jobDir,
-          maxHeight: Number(value),
+          maxHeight: videoHeight,
           cookiesPath,
           onProgress: (p) =>
             editStatus(`${labelLine}\n⬇️ Downloading... ${p.toFixed(1)}%`),
